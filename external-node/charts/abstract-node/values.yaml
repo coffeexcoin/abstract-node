@@ -1,0 +1,151 @@
+global:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+secret:
+  name: abstract-node-db-secret
+  password: 
+
+postgres:
+  name: postgres
+  image:
+    repository: postgres
+    tag: "14"
+  ports:
+    postgres: 5432
+    metrics: 9187
+  command:
+    - postgres
+    - -c
+    - max_connections=200
+    - -c
+    - log_error_verbosity=terse
+    - -c
+    - shared_buffers=2GB
+    - -c 
+    - effective_cache_size=4GB
+    - -c 
+    - maintenance_work_mem=1GB
+    - -c 
+    - checkpoint_completion_target=0.9
+    - -c 
+    - random_page_cost=1.1
+    - -c 
+    - effective_io_concurrency=200
+    - -c 
+    - min_wal_size=4GB
+    - -c 
+    - max_wal_size=16GB
+    - -c 
+    - max_worker_processes=16
+    - -c 
+    - checkpoint_timeout=1800
+  env:
+    - name: POSTGRES_DB
+      value: "postgres"
+    - name: POSTGRES_USER
+      value: "postgres"
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: abstract-node-db-secret
+          key: password
+  persistence:
+    name: postgres-storage
+    mountPath: /var/lib/postgresql/data
+    subPath: postgres
+    storageClass: 
+    accessModes: 
+      - ReadWriteOnce
+    size: 10Gi
+  readinessProbe:
+    exec:
+      command:
+        - pg_isready
+        - -U
+        - postgres
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  livenessProbe:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - exec pg_isready -U postgres || exit 1
+    initialDelaySeconds: 30
+    periodSeconds: 20
+  serviceName: "postgres"
+  replicas: 1
+  podSecurityContext:
+    fsGroup: 999
+    runAsUser: 999
+    runAsGroup: 999
+  exporter:
+    name: postgres-exporter
+    image:
+      repository: wrouesnel/postgres_exporter
+      tag: v0.8.0
+    portName: metrics
+    env:
+      - name: POSTGRES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: abstract-node-db-secret
+            key: password
+      - name: DATA_SOURCE_NAME
+        value: "postgresql://postgres:$(POSTGRES_PASSWORD)@localhost:5432/postgres?sslmode=disable"
+
+abstract-node:
+  name: abstract-node
+  serviceName: "abstract-node"
+  replicas: 1
+  imageRepository: matterlabs/external-node
+  imageTag: "2.0-v24.6.0"
+  ## Mainnet ETH RPC URL
+  ethRpcUrl: ""
+  ## External Abstract Node URL
+  absNodeUrl:
+  l1ChainId: "1"
+  l2ChainId: ""
+  ports:
+    http: 3060
+    ws: 3061
+    healthcheck: 3081
+    metrics: 3322
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "4"
+      memory: "16Gi"
+  env:
+    - name: DATABASE_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: abstract-node-db-secret
+          key: password
+          optional: false
+    - name: DATABASE_URL
+      value: "postgresql://postgres:$(DATABASE_PASSWORD)@postgres:5432/postgres?sslmode=disable"
+    - name: DATABASE_POOL_SIZE
+      value: "10"
+    - name: EN_MAIN_NODE_URL
+      value: "https://api.mainnet.abs.xyz"
+    - name: EN_STATE_CACHE_PATH
+      value: "./db/ext-node/state_keeper"
+    - name: EN_MERKLE_TREE_PATH
+      value: "./db/ext-node/lightweight"
+    - name: EN_SNAPSHOTS_RECOVERY_ENABLED
+      value: "true"
+    - name: EN_SNAPSHOTS_OBJECT_STORE_BUCKET_BASE_URL
+      value: "abstract-testnet-external-node-snapshots"
+    - name: EN_SNAPSHOTS_OBJECT_STORE_MODE
+      value: "GCSAnonymousReadOnly"
+    - name: RUST_LOG
+      value: "warn,zksync=info,zksync_core::metadata_calculator=debug,zksync_state=debug,zksync_utils=debug,zksync_web3_decl::client=error"
+  persistence:
+    storageClass: 
+    storageSize: 10Gi

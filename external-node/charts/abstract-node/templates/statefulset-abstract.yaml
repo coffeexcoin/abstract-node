@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.abstract-node.name }}
+  labels:
+    {{- include "abstract-node.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Values.abstract-node.serviceName }}
+  replicas: {{ .Values.abstract-node.replicas }}
+  selector:
+    matchLabels:
+      {{- include "abstract-node.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "abstract-node.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: abstract-node
+        image: "{{ .Values.abstract-node.imageRepository }}:{{ .Values.abstract-node.imageTag }}"
+        ports:
+        - containerPort: {{ .Values.abstract-node.ports.http }}
+          name: http
+        - containerPort: {{ .Values.abstract-node..ports.ws }}
+          name: ws
+        - containerPort: {{ .Values.abstract-node..ports.healthcheck }}
+          name: healthcheck
+        - containerPort: {{ .Values.abstract-node..ports.metrics }}
+          name: metrics
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        env:
+        - name: EN_HTTP_PORT
+          value: "{{ .Values.abstract-node.ports.http }}"
+        - name: EN_WS_PORT
+          value: "{{ .Values.abstract-node.ports.ws }}"
+        - name: EN_HEALTHCHECK_PORT
+          value: "{{ .Values.abstract-node.ports.healthcheck }}"
+        - name: EN_PROMETHEUS_PORT
+          value: "{{ .Values.abstract-node.ports.metrics }}"
+        - name: EN_ETH_CLIENT_URL
+          value: {{ .Values.abstract-node.ethRpcUrl }}
+        - name: EN_L1_CHAIN_ID
+          value: "{{ .Values.abstract-node.l1ChainId }}"
+        - name: EN_L2_CHAIN_ID
+          value: "{{ .Values.abstract-node.l2ChainId }}"
+        - name: EN_MAIN_NODE_URL
+          value: {{ .Values.abstract-node.absNodeUrl }}
+        {{- range .Values.env }}
+        - name: {{ .name }}
+          {{- if .value }}
+          value: {{ .value | quote }}
+          {{- else if .valueFrom }}
+          valueFrom:
+            {{- toYaml .valueFrom | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        volumeMounts:
+        - name: abstract-node-rocksdb-storage
+          mountPath: /db
+  volumeClaimTemplates:
+  - metadata:
+      name: abstract-node-rocksdb-storage
+    spec:
+      storageClassName: {{ .Values.persistence.storageClass }}
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.persistence.storageSize }}

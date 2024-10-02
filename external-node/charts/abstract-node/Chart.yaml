@@ -1,0 +1,14 @@
+apiVersion: v2
+name: abstract-node
+version: 0.1.0
+kubeVersion: "^1.20.0-0"
+description: Abstract Chain RPC Node
+type: application
+icon: https://d9s2izusg5pvp.cloudfront.net/icon/light.png
+keywords:
+  - abstract
+  - blockchain
+  - evm
+  - zkstack
+home: https://abs.xyz
+appVersion: 0.1.0

@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.postgres.name }}
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Values.postgres.serviceName }}
+  replicas: {{ .Values.postgres.replicas }}
+  selector:
+    matchLabels:
+      {{- include "common.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "common.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.postgres.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ .Values.postgres.name }}
+        image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+        ports:
+        - containerPort: 5432
+          name: postgres
+        command:
+        {{- toYaml .Values.postgres.command | nindent 8 }}
+        env:
+        {{- range .Values.postgres.env }}
+        - name: {{ .name }}
+          {{- if .value }}
+          value: {{ .value | quote }}
+          {{- else if .valueFrom }}
+          valueFrom:
+            {{- toYaml .valueFrom | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        volumeMounts:
+        - name: {{ .Values.postgres.persistence.name }}
+          mountPath: {{ .Values.postgres.persistence.mountPath }}
+          subPath: {{ .Values.postgres.persistence.subPath }}
+        readinessProbe:
+          {{- toYaml .Values.postgres.readinessProbe | nindent 10 }}
+        livenessProbe:
+          {{- toYaml .Values.postgres.livenessProbe | nindent 10 }}
+      {{- if .Values.global.metrics.enabled}}
+      - name: {{ .Values.postgres.exporter.name }}
+        image: "{{ .Values.postgres.exporter.image.repository }}:{{ .Values.postgres.exporter.image.tag }}"
+        ports:
+        - containerPort: 9187
+          name: metrics
+        env:
+        {{- range .Values.postgres.exporter.env }}
+        - name: {{ .name }}
+          {{- if .value }}
+          value: {{ .value | quote }}
+          {{- else if .valueFrom }}
+          valueFrom:
+            {{- toYaml .valueFrom | nindent 12 }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ .Values.postgres.persistence.name }}
+    spec:
+      storageClassName: {{ .Values.postgres.persistence.storageClass }}
+      accessModes: {{ .Values.postgres.persistence.accessModes }}
+      resources:
+        requests:
+          storage: {{ .Values.postgres.persistence.size }}
